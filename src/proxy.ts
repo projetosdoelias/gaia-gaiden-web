@@ -6,7 +6,7 @@ const PUBLIC_PATHS = [
   // Add other public paths here if needed
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const authToken = request.cookies.get("auth_token")?.value;
   const isAuthenticated = !!authToken;
   const isPublicPath = PUBLIC_PATHS.includes(request.nextUrl.pathname);

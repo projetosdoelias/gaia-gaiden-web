@@ -27,10 +27,10 @@ export default function Sidebar() {
           <span>📊 Dashboard</span>
         </Link>
         <Link
-          href="/sensores"
+          href="/telemetry"
           className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
         >
-          <span>🌿 Sensores</span>
+          <span>🌿 Telemetry</span>
         </Link>
         <Link
           href="/automacao"
