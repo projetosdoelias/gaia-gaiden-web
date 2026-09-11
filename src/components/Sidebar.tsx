@@ -21,7 +21,7 @@ export default function Sidebar() {
       {/* Navegação Principal */}
       <nav className="flex-1 p-4 space-y-1">
         <Link
-          href="/"
+          href="/dashboard"
           className="flex items-center space-x-3 px-4 py-3 rounded-xl bg-white/10 text-gaia-greenMint font-medium transition-all"
         >
           <span>📊 Dashboard</span>
