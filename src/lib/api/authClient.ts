@@ -9,6 +9,13 @@ export type AuthResponse = {
   access_token?: string;
 };
 
+export type UserProfile = {
+  id: number;
+  username: string;
+  email?: string;
+  createdAt?: string;
+};
+
 /**
  * Authentication API client.
  *
@@ -36,5 +43,14 @@ export const authClient = {
     return (await httpClient("/auth/refresh", {
       method: "POST",
     })) as AuthResponse;
+  },
+
+  async profile(token: string): Promise<UserProfile> {
+    return (await httpClient("/auth/profile", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })) as UserProfile;
   },
 };

@@ -14,28 +14,30 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = loginSchema.parse(body);
 
-    // Call NestJS authentication endpoint via authClient
+    // 1. Call NestJS authentication endpoint via authClient
     const result = await authClient.login({
       username: validated.username,
       password: validated.password,
     });
-    console.log("Login result:", result);
 
-    // NestJS returns { access_token: string }
     const accessToken = result.access_token as string | undefined;
     if (!accessToken) {
       throw new Error("Authentication succeeded but no access_token was returned");
     }
 
+    // 2. Fetch user profile to get real user data
+    const userProfile = await authClient.profile(accessToken);
+
+    // 3. Store session with token + real user data
     const sessionData: SessionData = {
       token: accessToken,
       user: {
-        id: "",
-        email: "",
+        id: userProfile.id,
+        username: userProfile.username,
+        email: userProfile.email,
       },
     };
 
-    // Set HttpOnly cookie
     const nextResponse = NextResponse.json({
       success: true,
       user: sessionData.user,

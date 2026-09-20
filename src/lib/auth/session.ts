@@ -6,8 +6,9 @@ export const SESSION_COOKIE_NAME = 'gaia_session';
 export type SessionData = {
   token: string;
   user?: {
-    id: string;
-    email: string;
+    id: number;
+    username: string;
+    email?: string;
   };
 };
 

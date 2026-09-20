@@ -39,9 +39,9 @@ export default function LoginPage() {
         throw new Error(errorData.message || "Login failed");
       }
 
-      // Handle redirect from middleware or default to home
+      // Handle redirect — go to dashboard after login
       const urlParams = new URLSearchParams(window.location.search);
-      const redirect = urlParams.get("redirect") || "/";
+      const redirect = urlParams.get("redirect") || "/dashboard";
       window.location.href = redirect;
     } catch (err) {
       setError(
