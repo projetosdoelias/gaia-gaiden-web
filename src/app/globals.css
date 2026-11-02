@@ -1,26 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Substituí o fundo branco padrão pelo fundo suave do Gaia Garden */
+  --background: #f3f6f2;
+  --foreground: #252d2a;
 }
 
-@theme inline {
+@theme {
+  /* Mantendo as variáveis do Next.js padrão */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* 🌿 INSERINDO A PALETA GAIA GARDEN (Padrão Tailwind v4) */
+  --color-gaia-bg: #f3f6f2;
+  --color-gaia-darkText: #252d2a;
+  --color-gaia-cardDark: #373c3f;
+  --color-gaia-greenDeep: #0f3b2e;
+  --color-gaia-greenMint: #a4e0c3;
+  --color-gaia-greenSignal: #b5edd2;
+
+  /* 🔴 SISTEMA DE ALERTAS */
+  --color-gaia-alert-critical: #d9534f;
+  --color-gaia-alert-warning: #e6a23c;
+  --color-gaia-alert-success: #42b983;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Opcional: Tons escuros para o Gaia Garden no futuro */
+    --background: #0f3b2e;
+    --foreground: #f3f6f2;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

@@ -1,9 +1,111 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+# Project Architecture
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+## CRITICAL RULES
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+- This project uses Next.js 16.x. Follow the installed version, not assumptions from older Next.js versions.
+- Read the relevant documentation in node_modules/next/dist/docs/ when Next.js behavior or APIs are uncertain.
+- Do not guess framework behavior, APIs, backend contracts, environment variables, or business rules.
+- Inspect existing code and usages before modifying established functionality.
+- Prefer the smallest change that correctly solves the task. Avoid unrelated refactors.
+
+## Architecture
+
+The system has two backend layers:
+
+Browser → Next.js → NestJS
+
+- Next.js is the frontend and BFF layer.
+- NestJS is the real backend and owns business logic, domain rules, persistence, authentication, and authorization.
+- The browser must never call the NestJS API directly.
+- Browser-facing backend endpoints belong under Next.js `/api/*`.
+
+Do not duplicate NestJS business logic in Next.js.
+
+## Next.js
+
+- Use the App Router.
+- Server Components are the default.
+- Use `"use client"` only when client-side interactivity, browser APIs, or client state actually requires it.
+- Use Route Handlers for browser-facing BFF endpoints.
+- In Next.js 16, use `proxy.ts` rather than the deprecated `middleware.ts` convention.
+- Proxy is only an optimistic route/session check. It is NOT the application's final authorization boundary.
+
+## API Clients
+
+Keep API communication separated by responsibility.
+
+- `httpClient`: generic HTTP transport only.
+- `authClient`: authentication API operations.
+- `telemetryClient`: telemetry API operations.
+- Other domains should have their own functional clients when needed.
+
+Do NOT create a generic API client that knows about sessions, authentication, business domains, or endpoint-specific rules.
+
+Do NOT put business logic inside API clients.
+
+## Authentication
+
+- Authentication/session management must be separated from HTTP transport.
+- Prefer secure HttpOnly cookies for browser sessions.
+- Never store authentication tokens in localStorage or sessionStorage.
+- Never expose server-only secrets or backend environment variables to client components.
+- NestJS remains responsible for validating authentication and authorization.
+
+## Data Fetching
+
+- Avoid unnecessary client-side fetching when a Server Component can perform the operation server-side.
+- Do not introduce caching for user-specific/authenticated data without understanding the consequences.
+- Do not add a state-management library unless the task actually requires it.
+
+## Server vs Browser
+
+A Server Component or other server-side Next.js code may communicate with NestJS directly through a server-only functional client when appropriate.
+
+Browser code must go through the Next.js BFF.
+
+Do not create an unnecessary internal HTTP request to `/api` merely to make a server-side request reach NestJS.
+
+## Code Quality
+
+- Prefer simple, explicit code over abstractions.
+- Do not over-engineer.
+- Do not introduce libraries when native Next.js/React/TypeScript functionality is sufficient.
+- Avoid `any`; prefer concrete types or `unknown`.
+- Reuse existing types and validation schemas when appropriate.
+- Keep responsibilities separated by layer.
+
+## Before Coding
+
+For non-trivial tasks:
+
+1. Inspect the relevant files.
+2. Search for existing usages and related implementations.
+3. Check the installed Next.js documentation when framework behavior is relevant.
+4. Identify the smallest architectural change required.
+5. Do not modify unrelated code.
+
+If a required backend contract or architectural decision is unknown, stop and mark it as:
+
+[NEEDS CONFIRMATION]
+
+Do not invent an endpoint, payload, response shape, environment variable, or business rule.
+
+## Existing Project Rules
+
+Respect `AGENTS.md`, `CLAUDE.md`, and the existing project conventions.
+
+Do not rewrite working code merely to match a preferred pattern.
+
+## Validation
+
+After meaningful changes, run the appropriate checks, preferably:
+
+- `npm run lint`
+- `npm run build`
+- relevant tests
+
+Fix issues caused by the change before considering the task complete.
 
 <!-- END:nextjs-agent-rules -->
