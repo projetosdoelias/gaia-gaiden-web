@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useHabitat } from "@/lib/context/HabitatContext";
 import type { Event } from "@/lib/api/eventsClient";
+import { apiJson, SessionExpiredError } from "@/lib/api/clientFetch";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -65,25 +66,15 @@ export default function EventsPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/habitat/${selectedHabitatId}/events`, {
-        signal,
-      });
-
-      if (!response.ok) {
-        let msg = `Failed to fetch events (${response.status})`;
-        try {
-          const errBody = (await response.json()) as { message?: string };
-          if (errBody.message) msg = errBody.message;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
-      }
-
-      const data = (await response.json()) as Event[];
+      const data = await apiJson<Event[]>(
+        `/api/habitat/${selectedHabitatId}/events`,
+        { signal },
+      );
       setEvents(sortByCreatedAtDesc(data));
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
+      // Session end is already redirecting to /login: no error flash.
+      if (err instanceof SessionExpiredError) return;
       const message =
         err instanceof Error ? err.message : "Failed to load events";
       setError(message);
@@ -119,28 +110,17 @@ export default function EventsPage() {
     setCreateError(null);
 
     try {
-      const response = await fetch(`/api/habitat/${selectedHabitatId}/events`, {
+      const created = await apiJson<Event>(`/api/habitat/${selectedHabitatId}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: desc }),
       });
-
-      if (!response.ok) {
-        let msg = `Failed to create event (${response.status})`;
-        try {
-          const errBody = (await response.json()) as { message?: string };
-          if (errBody.message) msg = errBody.message;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
-      }
-
-      const created = (await response.json()) as Event;
       setEvents(sortByCreatedAtDesc([...events, created]));
       setShowCreateModal(false);
       setNewDescription("");
     } catch (err) {
+      // Session end is already redirecting to /login: no error flash.
+      if (err instanceof SessionExpiredError) return;
       const message =
         err instanceof Error ? err.message : "Failed to create event";
       setCreateError(message);
@@ -164,7 +144,7 @@ export default function EventsPage() {
     setUpdateError(null);
 
     try {
-      const response = await fetch(
+      const updated = await apiJson<Event>(
         `/api/habitat/${selectedHabitatId}/events/${editingEvent.id}`,
         {
           method: "PATCH",
@@ -172,19 +152,6 @@ export default function EventsPage() {
           body: JSON.stringify({ description: desc }),
         },
       );
-
-      if (!response.ok) {
-        let msg = `Failed to update event (${response.status})`;
-        try {
-          const errBody = (await response.json()) as { message?: string };
-          if (errBody.message) msg = errBody.message;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
-      }
-
-      const updated = (await response.json()) as Event;
       const updatedList = sortByCreatedAtDesc(
         events.map((e) => (e.id === updated.id ? updated : e)),
       );
@@ -192,6 +159,8 @@ export default function EventsPage() {
       setEditingEvent(null);
       setEditDescription("");
     } catch (err) {
+      // Session end is already redirecting to /login: no error flash.
+      if (err instanceof SessionExpiredError) return;
       const message =
         err instanceof Error ? err.message : "Failed to update event";
       setUpdateError(message);
@@ -209,25 +178,16 @@ export default function EventsPage() {
     setDeleteError(null);
 
     try {
-      const response = await fetch(
+      await apiJson<void>(
         `/api/habitat/${selectedHabitatId}/events/${deletingEvent.id}`,
         { method: "DELETE" },
       );
 
-      if (!response.ok) {
-        let msg = `Failed to delete event (${response.status})`;
-        try {
-          const errBody = (await response.json()) as { message?: string };
-          if (errBody.message) msg = errBody.message;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
-      }
-
       setEvents(events.filter((e) => e.id !== deletingEvent.id));
       setDeletingEvent(null);
     } catch (err) {
+      // Session end is already redirecting to /login: no error flash.
+      if (err instanceof SessionExpiredError) return;
       const message =
         err instanceof Error ? err.message : "Failed to delete event";
       setDeleteError(message);

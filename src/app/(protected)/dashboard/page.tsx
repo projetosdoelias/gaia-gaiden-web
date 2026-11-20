@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useHabitat } from "@/lib/context/HabitatContext";
+import { apiJson, SessionExpiredError } from "@/lib/api/clientFetch";
+import { getVpdBand, type VpdBand } from "@/lib/telemetry/vpdBands";
+import { VpdChart } from "./_components/VpdChart";
 
 type TelemetryEntry = {
   id: number;
@@ -18,12 +21,27 @@ type TelemetryResponse = {
   data: TelemetryEntry | null;
 };
 
+/** Outcome of one latest-reading request (`key` = habitat + refresh count). */
+type LastTelemetryResult = {
+  key: string;
+  habitatId: number;
+  telemetry: TelemetryEntry | null;
+  fetchedAt: Date | null;
+  error: string | null;
+};
+
+/** Card styling per band; thresholds and labels come from `VPD_BANDS`. */
+const VPD_STATUS_STYLES: Record<VpdBand["label"], { color: string; bg: string }> = {
+  "Too Low": { color: "text-blue-600", bg: "bg-blue-50" },
+  Low: { color: "text-amber-600", bg: "bg-amber-50" },
+  Ideal: { color: "text-emerald-600", bg: "bg-emerald-50" },
+  High: { color: "text-orange-600", bg: "bg-orange-50" },
+  Critical: { color: "text-red-600", bg: "bg-red-50" },
+};
+
 function getVpdStatus(vpd: number) {
-  if (vpd < 0.4) return { label: "Too Low", color: "text-blue-600", bg: "bg-blue-50" };
-  if (vpd < 0.8) return { label: "Low", color: "text-amber-600", bg: "bg-amber-50" };
-  if (vpd <= 1.2) return { label: "Ideal", color: "text-emerald-600", bg: "bg-emerald-50" };
-  if (vpd <= 1.6) return { label: "High", color: "text-orange-600", bg: "bg-orange-50" };
-  return { label: "Critical", color: "text-red-600", bg: "bg-red-50" };
+  const { label } = getVpdBand(vpd);
+  return { label, ...VPD_STATUS_STYLES[label] };
 }
 
 function formatTimestamp(isoString: string): string {
@@ -40,42 +58,40 @@ export default function DashboardPage() {
   const { selectedHabitatId, habitats, isLoading: habitatsLoading } =
     useHabitat();
 
-  const [telemetry, setTelemetry] = useState<TelemetryEntry | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [result, setResult] = useState<LastTelemetryResult | null>(null);
 
   const selectedHabitat = habitats.find((h) => h.id === selectedHabitatId);
 
-  const fetchLastTelemetry = useCallback(async () => {
-    if (selectedHabitatId === null) {
-      setTelemetry(null);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/telemetry/${selectedHabitatId}/last`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch telemetry (${response.status})`);
-      }
-      const result = (await response.json()) as TelemetryResponse;
-      setTelemetry(result.data ?? null);
-      setLastFetched(new Date());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load telemetry data";
-      setError(message);
-      setTelemetry(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedHabitatId]);
+  // Loading is derived: the stored result belongs to an older request.
+  const requestKey = `${selectedHabitatId}|${refreshCount}`;
+  const isLoading = selectedHabitatId !== null && result?.key !== requestKey;
+  // Keep showing the habitat's previous reading while a refresh is in flight.
+  const shown = result?.habitatId === selectedHabitatId ? result : null;
+  const telemetry = shown?.telemetry ?? null;
+  const lastFetched = shown?.fetchedAt ?? null;
+  const error = isLoading ? null : (shown?.error ?? null);
+
+  const fetchLastTelemetry = useCallback(() => setRefreshCount((n) => n + 1), []);
 
   useEffect(() => {
-    if (selectedHabitatId !== null) {
-      fetchLastTelemetry();
-    }
-  }, [selectedHabitatId, fetchLastTelemetry]);
+    if (selectedHabitatId === null) return;
+    const controller = new AbortController();
+    const done = (patch: Omit<LastTelemetryResult, "key" | "habitatId">) =>
+      setResult({ key: requestKey, habitatId: selectedHabitatId, ...patch });
+
+    apiJson<TelemetryResponse>(`/api/telemetry/${selectedHabitatId}/last`, {
+      signal: controller.signal,
+    })
+      .then((res) => done({ telemetry: res.data ?? null, fetchedAt: new Date(), error: null }))
+      .catch((err: unknown) => {
+        // Stale request, or the session ended and /login is loading: no error flash.
+        if (controller.signal.aborted || err instanceof SessionExpiredError) return;
+        const message = err instanceof Error ? err.message : "Failed to load telemetry data";
+        done({ telemetry: null, fetchedAt: null, error: message });
+      });
+    return () => controller.abort();
+  }, [selectedHabitatId, requestKey]);
 
   const habitatName = selectedHabitat?.title ?? "Climate Zone";
 
@@ -219,60 +235,12 @@ export default function DashboardPage() {
               </span>
             </div>
           </div>
-
-          {/* VPD CHART placeholder */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-gaia-greenDeep uppercase tracking-wider">VPD Historical Trend</h3>
-                <p className="text-xs text-gray-400">
-                  Last 24 hours timeline performance · Current: <span className="font-semibold text-gaia-greenDeep">{telemetry.vpd.toFixed(2)} kPa</span>
-                </p>
-              </div>
-              <div className="flex bg-gaia-bg p-1 rounded-lg text-xs font-medium text-gaia-darkText/70 self-start sm:self-auto">
-                <span className="bg-white text-gaia-greenDeep px-3 py-1 rounded-md shadow-2xs font-bold">24h</span>
-                <span className="px-3 py-1 opacity-50">7d</span>
-                <span className="px-3 py-1 opacity-50">30d</span>
-              </div>
-            </div>
-
-            <div className="w-full bg-gaia-bg/30 rounded-xl p-4 border border-gray-100/50">
-              <div className="h-64 w-full relative flex flex-col justify-between">
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-40">
-                  <div className="border-b border-dashed border-gray-200 w-full h-0" />
-                  <div className="border-b border-dashed border-gray-200 w-full h-0" />
-                  <div className="border-b border-dashed border-gray-200 w-full h-0" />
-                  <div className="border-b border-dashed border-gray-200 w-full h-0" />
-                </div>
-
-                <svg className="w-full h-full absolute inset-0 overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
-                  <defs>
-                    <linearGradient id="vpdGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#A4E0C3" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#A4E0C3" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M 0 80 Q 20 40 40 60 T 80 30 T 100 50 L 100 100 L 0 100 Z" fill="url(#vpdGradient)" />
-                  <path d="M 0 80 Q 20 40 40 60 T 80 30 T 100 50" fill="none" stroke="#0F3B2E" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-
-                <div className="absolute left-2 top-0 bottom-0 flex flex-col justify-between text-[9px] text-gray-400 font-mono pointer-events-none">
-                  <span>1.6 kPa</span>
-                  <span>1.2 kPa</span>
-                  <span>0.8 kPa</span>
-                  <span>0.4 kPa</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-400 font-medium px-4">
-                <span>Yesterday, 10 PM</span>
-                <span>6 AM</span>
-                <span>2 PM</span>
-                <span>Today, 10 PM</span>
-              </div>
-            </div>
-          </div>
         </>
+      )}
+
+      {/* VPD HISTORY */}
+      {selectedHabitatId !== null && !habitatsLoading && (
+        <VpdChart habitatId={selectedHabitatId} refreshKey={refreshCount} />
       )}
     </div>
   );

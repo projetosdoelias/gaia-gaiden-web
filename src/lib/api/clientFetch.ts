@@ -1,29 +1,89 @@
 /**
- * Client-side API fetch helper with automatic 401/403 interception.
+ * Browser-side wrapper around `fetch` for every call to the BFF (`/api/*`).
  *
- * Wraps the native `fetch` API so that any BFF call that returns 401
- * (Unauthorized) or 403 (Forbidden) triggers an automatic logout + redirect
- * to the login page.
+ * - 401 → the session is gone. Runs the shared session-end routine once
+ *   (single flight), then throws `SessionExpiredError`.
+ * - 403 → throws `ForbiddenError`. The user stays logged in.
+ * - other non-ok → `api` returns the Response (callers can inspect 404);
+ *   `apiJson` throws `ApiError` with the status.
+ *
+ * No React dependency: this module works before any provider has mounted.
+ * Token refresh happens in the BFF (`withSession`), not here — the token
+ * lives in an HttpOnly cookie this code cannot read.
  *
  * Usage:
- *   import { api } from "@/lib/api/clientFetch";
- *   const data = await api("/api/habitat");
- *
- * Future: refresh-token retry logic can be added here transparently.
+ *   import { apiJson } from "@/lib/api/clientFetch";
+ *   const habitats = await apiJson<Habitat[]>("/api/habitat");
  */
 
-let logoutCallback: (() => void) | null = null;
-
-export function registerLogoutHandler(handler: () => void) {
-  logoutCallback = handler;
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public details?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
 }
 
-function triggerLogout() {
-  if (logoutCallback) {
-    logoutCallback();
-  } else {
-    // Fallback: redirect directly if no handler is registered
-    window.location.href = "/login";
+export class ForbiddenError extends ApiError {
+  constructor(message = "You don't have permission to do this.", details?: unknown) {
+    super(403, message, details);
+    this.name = "ForbiddenError";
+  }
+}
+
+export class SessionExpiredError extends ApiError {
+  constructor(message = "Your session has expired.") {
+    super(401, message);
+    this.name = "SessionExpiredError";
+  }
+}
+
+export type SessionEndReason = "session_expired" | "logout";
+
+let sessionEnd: Promise<void> | null = null;
+
+function loginUrl(reason: SessionEndReason): string {
+  if (reason === "logout") return "/login";
+  const { pathname, search } = window.location;
+  const params = new URLSearchParams({
+    redirect: pathname + search,
+    reason: "session_expired",
+  });
+  return `/login?${params.toString()}`;
+}
+
+/**
+ * Ends the session: clears the cookie via the BFF, then does a full page load
+ * to /login (drops all in-memory state from the old session).
+ * Single flight: concurrent callers share one run.
+ */
+export function endSession(reason: SessionEndReason): Promise<void> {
+  if (!sessionEnd) {
+    sessionEnd = (async () => {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch {
+        // Proceed even if the request fails.
+      }
+      window.location.assign(loginUrl(reason));
+    })();
+  }
+  return sessionEnd;
+}
+
+async function readErrorBody(
+  response: Response,
+): Promise<{ message?: string; details?: unknown }> {
+  try {
+    return (await response.json()) as { message?: string; details?: unknown };
+  } catch {
+    return {};
   }
 }
 
@@ -36,22 +96,22 @@ export async function api(
     credentials: "include",
   });
 
-  if (response.status === 401 || response.status === 403) {
-    // Token expired or invalid — auto logout
-    triggerLogout();
-    throw new Error(
-      response.status === 401
-        ? "Unauthorized — session expired"
-        : "Forbidden — insufficient permissions",
-    );
+  if (response.status === 401) {
+    void endSession("session_expired");
+    throw new SessionExpiredError();
+  }
+
+  if (response.status === 403) {
+    const body = await readErrorBody(response);
+    throw new ForbiddenError(body.message, body.details);
   }
 
   return response;
 }
 
 /**
- * Convenience helper: fetch JSON from a BFF endpoint.
- * Automatically handles 401/403 and throws on non-ok responses.
+ * Fetch JSON from a BFF endpoint. Throws `ApiError` on any non-ok response
+ * (plus the 401/403 handling of `api`).
  */
 export async function apiJson<T = unknown>(
   input: RequestInfo,
@@ -60,16 +120,12 @@ export async function apiJson<T = unknown>(
   const response = await api(input, init);
 
   if (!response.ok) {
-    let errorMessage = `Request failed (${response.status})`;
-    try {
-      const errorBody = (await response.json()) as { message?: string };
-      if (errorBody.message) {
-        errorMessage = errorBody.message;
-      }
-    } catch {
-      // ignore parse errors
-    }
-    throw new Error(errorMessage);
+    const body = await readErrorBody(response);
+    throw new ApiError(
+      response.status,
+      body.message ?? `Request failed (${response.status})`,
+      body.details,
+    );
   }
 
   // Handle 204 No Content
@@ -79,4 +135,9 @@ export async function apiJson<T = unknown>(
   }
 
   return (await response.json()) as T;
+}
+
+/** Test-only: reset the single-flight state between tests. */
+export function __resetSessionEndForTests() {
+  sessionEnd = null;
 }

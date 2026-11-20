@@ -26,7 +26,7 @@ export default function PublicLandingPage() {
 
         {/* BOTÃO DE LOGIN */}
         <Link
-          href="/dashboard"
+          href="/login"
           className="text-sm font-semibold text-gaia-greenDeep hover:opacity-80 transition-all border-b-2 border-gaia-greenDeep/20 hover:border-gaia-greenDeep pb-0.5"
         >
           Sign In
@@ -52,7 +52,7 @@ export default function PublicLandingPage() {
 
         {/* BOTÃO PRINCIPAL DE ACESSO */}
         <Link
-          href="/dashboard"
+          href="/login"
           className="inline-flex items-center bg-gaia-greenDeep hover:bg-gaia-greenDeep/90 text-white font-medium px-8 py-3.5 rounded-xl shadow-sm hover:shadow-md transition-all space-x-2 text-sm md:text-base tracking-wide"
         >
           <span>Launch Platform</span>

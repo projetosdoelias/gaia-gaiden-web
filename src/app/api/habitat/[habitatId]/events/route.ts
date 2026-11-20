@@ -1,7 +1,8 @@
-import { getSession } from "@/lib/auth/session";
 import { eventsClient } from "@/lib/api/eventsClient";
-import { APIClientError } from "@/lib/api/errors";
+import { withSession } from "@/lib/api/withSession";
 import { NextResponse } from "next/server";
+
+type Ctx = { params: Promise<{ habitatId: string }> };
 
 /**
  * GET /api/habitat/:habitatId/events
@@ -9,20 +10,10 @@ import { NextResponse } from "next/server";
  * Returns a JSON array of events belonging to the specified habitat.
  * Authentication is validated via the session cookie.
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ habitatId: string }> },
-) {
-  try {
-    const session = await getSession();
-    if (!session?.token) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    const { habitatId } = await params;
+export const GET = withSession<Ctx>(
+  "fetching events",
+  async ({ ctx, token }) => {
+    const { habitatId } = await ctx.params;
     const habitatIdNum = parseInt(habitatId, 10);
     if (isNaN(habitatIdNum)) {
       return NextResponse.json(
@@ -31,23 +22,10 @@ export async function GET(
       );
     }
 
-    const events = await eventsClient.list(session.token, habitatIdNum);
+    const events = await eventsClient.list(token, habitatIdNum);
     return NextResponse.json(events);
-  } catch (error) {
-    if (error instanceof APIClientError) {
-      return NextResponse.json(
-        { message: error.message, details: error.details },
-        { status: error.status },
-      );
-    }
-
-    console.error("Unexpected error fetching events:", error);
-    return NextResponse.json(
-      { message: "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
+  },
+);
 
 /**
  * POST /api/habitat/:habitatId/events
@@ -55,20 +33,10 @@ export async function GET(
  * Creates a new event for the specified habitat.
  * Expects a JSON body with a "description" field.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ habitatId: string }> },
-) {
-  try {
-    const session = await getSession();
-    if (!session?.token) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    const { habitatId } = await params;
+export const POST = withSession<Ctx>(
+  "creating event",
+  async ({ request, ctx, token }) => {
+    const { habitatId } = await ctx.params;
     const habitatIdNum = parseInt(habitatId, 10);
     if (isNaN(habitatIdNum)) {
       return NextResponse.json(
@@ -86,24 +54,11 @@ export async function POST(
     }
 
     const newEvent = await eventsClient.create(
-      session.token,
+      token,
       habitatIdNum,
       body.description.trim(),
     );
 
     return NextResponse.json(newEvent, { status: 201 });
-  } catch (error) {
-    if (error instanceof APIClientError) {
-      return NextResponse.json(
-        { message: error.message, details: error.details },
-        { status: error.status },
-      );
-    }
-
-    console.error("Unexpected error creating event:", error);
-    return NextResponse.json(
-      { message: "Internal server error" },
-      { status: 500 },
-    );
-  }
-}
+  },
+);
