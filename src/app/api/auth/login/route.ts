@@ -1,4 +1,5 @@
 import { setSession, type SessionData } from "@/lib/auth/session";
+import { decodeJwtExp } from "@/lib/auth/jwt";
 import { authClient } from "@/lib/api/authClient";
 import { APIClientError } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
@@ -29,8 +30,20 @@ export async function POST(request: Request) {
     const userProfile = await authClient.profile(accessToken);
 
     // 3. Store session with token + real user data
+    //    expiresAt drives the cookie lifetime and the optimistic proxy check
+    //    (decoded, not verified — NestJS remains the authority).
+    const expiresAt = decodeJwtExp(accessToken) ?? undefined;
+    if (expiresAt !== undefined && expiresAt <= Date.now()) {
+      // A cookie with Max-Age=0 would be dropped at once and the user would
+      // bounce back to /login silently (also covers server clock skew).
+      return NextResponse.json(
+        { success: false, error: "Received an expired token. Please try again." },
+        { status: 502 },
+      );
+    }
     const sessionData: SessionData = {
       token: accessToken,
+      expiresAt,
       user: {
         id: userProfile.id,
         username: userProfile.username,
