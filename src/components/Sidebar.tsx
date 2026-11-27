@@ -51,25 +51,25 @@ export default function Sidebar() {
             <span>📊 Dashboard</span>
           </Link>
           <Link
+            href="/plants"
+            onClick={close}
+            className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
+          >
+            <span>🌱 Plants</span>
+          </Link>
+          <Link
+            href="/events"
+            onClick={close}
+            className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
+          >
+            <span>📅 Events</span>
+          </Link>
+          <Link
             href="/telemetry"
             onClick={close}
             className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
           >
             <span>🌿 Telemetry</span>
-          </Link>
-          <Link
-            href="/automacao"
-            onClick={close}
-            className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
-          >
-            <span>⚙️ Automação</span>
-          </Link>
-          <Link
-            href="/relatorios"
-            onClick={close}
-            className="flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/5 text-gray-300 hover:text-white transition-all"
-          >
-            <span>📈 Relatórios</span>
           </Link>
         </nav>
 

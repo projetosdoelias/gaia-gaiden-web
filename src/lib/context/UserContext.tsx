@@ -7,8 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
-import { registerLogoutHandler } from "@/lib/api/clientFetch";
+import { apiJson, endSession } from "@/lib/api/clientFetch";
 
 export type User = {
   id: number;
@@ -27,48 +26,28 @@ const UserContext = createContext<UserContextValue | undefined>(undefined);
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
 
-  const fetchProfile = useCallback(async () => {
-    try {
-      const response = await fetch("/api/auth/profile", {
-        credentials: "include",
+  useEffect(() => {
+    let cancelled = false;
+    // A 401 here ends the session inside apiJson (clientFetch).
+    apiJson<User>("/api/auth/profile")
+      .then((data) => {
+        if (!cancelled) setUser(data);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
       });
-      if (response.ok) {
-        const data = (await response.json()) as User;
-        setUser(data);
-      } else if (response.status === 401) {
-        setUser(null);
-      }
-    } catch {
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  const logout = useCallback(async () => {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch {
-      // Proceed even if the request fails
-    }
-
-    setUser(null);
-    router.push("/login");
-  }, [router]);
-
-  // Register the logout handler for automatic 401/403 interception
-  useEffect(() => {
-    registerLogoutHandler(logout);
-  }, [logout]);
+  // Same session-end routine as an expired session (clears the cookie, full
+  // page load to /login), so no state from this session survives.
+  const logout = useCallback(() => endSession("logout"), []);
 
   return (
     <UserContext.Provider value={{ user, isLoading, logout }}>
