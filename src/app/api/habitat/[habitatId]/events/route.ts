@@ -1,8 +1,14 @@
 import { eventsClient } from "@/lib/api/eventsClient";
 import { withSession } from "@/lib/api/withSession";
+import { eventBodySchema } from "@/lib/schemas/event";
+import { idParamSchema } from "@/lib/schemas/plant";
 import { NextResponse } from "next/server";
 
-type Ctx = { params: Promise<{ habitatId: string }> };
+type Ctx = RouteContext<"/api/habitat/[habitatId]/events">;
+
+function invalidHabitatId() {
+  return NextResponse.json({ message: "Invalid habitat ID" }, { status: 400 });
+}
 
 /**
  * GET /api/habitat/:habitatId/events
@@ -13,16 +19,10 @@ type Ctx = { params: Promise<{ habitatId: string }> };
 export const GET = withSession<Ctx>(
   "fetching events",
   async ({ ctx, token }) => {
-    const { habitatId } = await ctx.params;
-    const habitatIdNum = parseInt(habitatId, 10);
-    if (isNaN(habitatIdNum)) {
-      return NextResponse.json(
-        { message: "Invalid habitat ID" },
-        { status: 400 },
-      );
-    }
+    const habitatId = idParamSchema.safeParse((await ctx.params).habitatId);
+    if (!habitatId.success) return invalidHabitatId();
 
-    const events = await eventsClient.list(token, habitatIdNum);
+    const events = await eventsClient.list(token, habitatId.data);
     return NextResponse.json(events);
   },
 );
@@ -31,32 +31,19 @@ export const GET = withSession<Ctx>(
  * POST /api/habitat/:habitatId/events
  *
  * Creates a new event for the specified habitat.
- * Expects a JSON body with a "description" field.
+ * Body is whitelisted by `eventBodySchema` (strict).
  */
 export const POST = withSession<Ctx>(
   "creating event",
   async ({ request, ctx, token }) => {
-    const { habitatId } = await ctx.params;
-    const habitatIdNum = parseInt(habitatId, 10);
-    if (isNaN(habitatIdNum)) {
-      return NextResponse.json(
-        { message: "Invalid habitat ID" },
-        { status: 400 },
-      );
-    }
+    const habitatId = idParamSchema.safeParse((await ctx.params).habitatId);
+    if (!habitatId.success) return invalidHabitatId();
 
-    const body = (await request.json()) as { description?: string };
-    if (typeof body.description !== "string" || body.description.trim().length === 0) {
-      return NextResponse.json(
-        { message: "Description is required and must not be empty" },
-        { status: 400 },
-      );
-    }
-
+    const { description } = eventBodySchema.parse(await request.json());
     const newEvent = await eventsClient.create(
       token,
-      habitatIdNum,
-      body.description.trim(),
+      habitatId.data,
+      description,
     );
 
     return NextResponse.json(newEvent, { status: 201 });

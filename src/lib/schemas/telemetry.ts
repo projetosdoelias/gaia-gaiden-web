@@ -31,6 +31,20 @@ export const seriesQuerySchema = z
   })
   .strict();
 
+/**
+ * Body of POST /api/habitat/:habitatId/telemetry (manual reading).
+ * The habitat comes from the route param, never from the body. VPD is
+ * computed by the backend. Format validation only: value ranges belong
+ * to the backend.
+ */
+export const createTelemetrySchema = z
+  .object({
+    temperature: z.number({ error: "Enter a temperature" }),
+    humidity: z.number({ error: "Enter a humidity" }),
+  })
+  .strict();
+export type CreateTelemetryInput = z.infer<typeof createTelemetrySchema>;
+
 const HOUR_MS = 60 * 60 * 1000;
 const RANGE_MS: Record<SeriesRange, number> = {
   "24h": 24 * HOUR_MS,

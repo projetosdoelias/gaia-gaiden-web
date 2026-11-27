@@ -16,16 +16,16 @@ Next.js 16.3 (App Router), React 19.2, TypeScript 5 (strict), Tailwind CSS v4, Z
 
 ## Critical rules
 - **The BFF only forwards requests.** Route handlers in `src/app/api/` must never contain business logic, access a database or compute domain data (for example, the backend calculates VPD). They may only:
-  - read the session and attach auth (a Bearer token, or `x-api-key` for telemetry)
+  - read the session and attach the user's JWT as a Bearer token (every route, telemetry included; API keys are for IoT devices only and never used here)
   - validate and shape the input with Zod before sending it
   - map backend responses and errors for the UI
 - The browser never calls NestJS directly. Client code calls `/api/*` only.
-- Never store tokens in localStorage or sessionStorage, and never expose server env vars (`GAIA_GARDEN_API_URL`, `TELEMETRY_API_KEY`) to client components.
+- Never store tokens in localStorage or sessionStorage, and never expose server env vars (`GAIA_GARDEN_API_URL`) to client components.
 - `proxy.ts` (Next 16's replacement for `middleware.ts`) only does an optimistic session check. It is not the authorization boundary.
 - Don't guess backend contracts, env vars or business rules. Read the existing code or ask.
 - Make the smallest correct change and avoid unrelated refactors.
 - **Ownership comes from the JWT** (checked in NestJS). Route handlers never accept `habitatId` or `userId` from the request body; they come from route params only.
-- **Client calls use `api` / `apiJson`** from `src/lib/api/clientFetch.ts`, never raw `fetch`, so a 401 or 403 triggers auto-logout. The events page still uses raw `fetch`; don't copy that.
+- **Client calls use `api` / `apiJson`** from `src/lib/api/clientFetch.ts`, never raw `fetch`, so a 401 ends the session and redirects to login. The only exception is the login page: there a 401 means wrong credentials, not an expired session.
 - **Validate everything in the BFF with Zod**:
   - IDs are positive integers parsed from digit-only strings. Don't use `parseInt`, which accepts `"12abc"`.
   - Request bodies use `.strict()` schemas.
@@ -35,7 +35,8 @@ Next.js 16.3 (App Router), React 19.2, TypeScript 5 (strict), Tailwind CSS v4, Z
 ## Architecture
 - `src/lib/api/httpClient.ts`: generic transport only (no auth, no domain knowledge). It throws `APIClientError` or `NetworkError` from `errors.ts`.
 - `src/lib/api/<domain>Client.ts`: one typed client per backend resource (`authClient`, `habitatClient`, `eventsClient`, `telemetryClient`, `plantsClient`, `plantLogsClient`). The caller passes the token explicitly.
-- `src/lib/api/clientFetch.ts`: the browser-side `api` / `apiJson` helpers. A 401 or 403 response triggers auto-logout.
+- `src/lib/api/withSession.ts`: wraps every protected route handler. A missing session or a NestJS 401 returns 401 and clears the cookie. Other errors, 403 included, go through `errorResponse` (`routeErrors.ts`) with the backend status.
+- `src/lib/api/clientFetch.ts`: the browser-side `api` / `apiJson` helpers. A 401 runs `endSession` once (it clears the cookie and does a full page load to `/login?redirect=…&reason=session_expired`) and throws `SessionExpiredError`; callers ignore that error. A 403 throws `ForbiddenError` and the user **stays logged in**: it means "not allowed", not "not authenticated". Don't change 403 to log the user out.
 - `src/proxy.ts`: it must sit next to `app/`, which is why it lives in `src/` and not at the repo root. It checks the `gaia_session` cookie. Public routes are `/` and `/login`. Anyone else without a session is sent to `/login?redirect=<path>`.
 - `src/lib/auth/session.ts`: the HttpOnly cookie `gaia_session` (`{ token, user }`, 24h).
 - `src/lib/context/`: `UserContext` (profile, logout), `HabitatContext` (habitats plus the selected habitat, which scopes every page) and `SidebarContext`.
@@ -48,7 +49,7 @@ Next.js 16.3 (App Router), React 19.2, TypeScript 5 (strict), Tailwind CSS v4, Z
 - **Telemetry** `{ id, habitatId, temperature, humidity, vpd, recordedAt, createdAt }`:
   - Read the latest reading with `GET /api/telemetry/:habitatId/last`. It returns `{ data }`, and a backend 404 becomes `{ data: null }`.
   - Read the VPD history with `GET /api/habitat/:habitatId/telemetry/series?range=24h|7d|30d&tz=<IANA>`. The BFF turns the preset into `from`/`to` (`rangeToWindow` in `src/lib/schemas/telemetry.ts`) and the backend picks the bucket (`hour`/`day`). It returns `{ habitatId, metric, bucket, from, to, tz, points: [{ bucketStart, avg, min, max, count }] }`. The dashboard's `VpdChart` uses it.
-  - Submit through a Server Action using the API key.
+  - Record a manual reading with `POST /api/habitat/:habitatId/telemetry` (`{ temperature, humidity }`, strict). The BFF sends the user's JWT and the param habitat to NestJS `POST /telemetry`, which checks ownership (404 otherwise) and computes the VPD. The `(protected)/telemetry` page uses the habitat selected in the header.
 - **Plant** `{ id, name, description|null, variety|null, germinatedAt|null, seedlingAt|null, vegetativeAt|null, floweringAt|null, habitatId, createdAt, updatedAt }`: CRUD at `/api/habitat/:habitatId/plants[/:plantId]`. DELETE is a soft delete and returns 204.
   - The backend still names the field `strain`. `src/lib/api/plantMapper.ts` (BFF only) maps it to `variety`, so `strain` never reaches the UI.
   - Schemas are in `src/lib/schemas/plant.ts`. Create needs `name`, `description` and `variety`; `germinatedAt`/`seedlingAt` are optional `YYYY-MM-DD` dates, sent as UTC midnight. Update is partial, and the backend rejects `null`.

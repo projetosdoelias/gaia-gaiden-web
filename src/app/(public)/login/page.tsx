@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { z } from "zod";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const DEFAULT_REDIRECT = "/dashboard";
@@ -46,7 +46,6 @@ function getSafeRedirect(redirect: string | null): string {
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   const loginSchema = z.object({
     username: z.string().min(1, "Username is required"),

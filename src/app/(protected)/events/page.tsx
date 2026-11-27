@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useHabitat } from "@/lib/context/HabitatContext";
 import type { Event } from "@/lib/api/eventsClient";
 import { apiJson, SessionExpiredError } from "@/lib/api/clientFetch";
@@ -32,8 +32,18 @@ export default function EventsPage() {
   // ── State declarations ─────────────────────────────────────────────────────
 
   const [events, setEvents] = useState<Event[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Which request (habitat + reload count) the current `events` came from, and
+  // its load error. Loading is derived from it, so the effect never sets state
+  // synchronously; Retry bumps `reloadKey`.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState<{
+    key: string;
+    error: string | null;
+  } | null>(null);
+  const requestKey = `${selectedHabitatId}:${reloadKey}`;
+  const isLoading = selectedHabitatId !== null && loaded?.key !== requestKey;
+  const error =
+    isLoading || selectedHabitatId === null ? null : (loaded?.error ?? null);
 
   // Create modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -56,46 +66,36 @@ export default function EventsPage() {
 
   // ── Fetch events ────────────────────────────────────────────────────────────
 
-  const fetchEvents = useCallback(async (signal?: AbortSignal) => {
-    if (selectedHabitatId === null) {
-      setEvents([]);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const data = await apiJson<Event[]>(
-        `/api/habitat/${selectedHabitatId}/events`,
-        { signal },
-      );
-      setEvents(sortByCreatedAtDesc(data));
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") return;
-      // Session end is already redirecting to /login: no error flash.
-      if (err instanceof SessionExpiredError) return;
-      const message =
-        err instanceof Error ? err.message : "Failed to load events";
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedHabitatId]);
-
+  // With no habitat selected the list is hidden at render time (see below),
+  // so there is nothing to reset here.
   useEffect(() => {
-    if (selectedHabitatId !== null) {
-      const abortController = new AbortController();
+    if (selectedHabitatId === null) return;
+    const key = `${selectedHabitatId}:${reloadKey}`;
+    const controller = new AbortController();
 
-      fetchEvents(abortController.signal);
+    apiJson<Event[]>(`/api/habitat/${selectedHabitatId}/events`, {
+      signal: controller.signal,
+    })
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setEvents(sortByCreatedAtDesc(data));
+        setLoaded({ key, error: null });
+      })
+      .catch((err: unknown) => {
+        // Session end is already redirecting to /login: no error flash.
+        if (controller.signal.aborted || err instanceof SessionExpiredError) {
+          return;
+        }
+        setEvents([]);
+        setLoaded({
+          key,
+          error: err instanceof Error ? err.message : "Failed to load events",
+        });
+      });
 
-      return () => {
-        abortController.abort();
-      };
-    } else {
-      setEvents([]);
-    }
-  }, [selectedHabitatId, fetchEvents]);
+    // Abort the in-flight request when the habitat changes or on unmount.
+    return () => controller.abort();
+  }, [selectedHabitatId, reloadKey]);
 
   // ── Create event ────────────────────────────────────────────────────────────
 
@@ -275,6 +275,13 @@ export default function EventsPage() {
       {!isLoading && error && (
         <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-4">
           <p className="text-gaia-alert-critical font-medium">{error}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mt-3 bg-white border border-gray-100 text-gray-600 hover:bg-gray-50 rounded-xl px-4 py-2 text-sm"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -291,7 +298,7 @@ export default function EventsPage() {
       )}
 
       {/* Event cards */}
-      {!isLoading && !error && events.length > 0 && (
+      {!isLoading && !error && selectedHabitatId !== null && events.length > 0 && (
         <div className="space-y-3">
           {events.map((event) => (
             <div

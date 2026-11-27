@@ -1,7 +1,18 @@
 import { httpClient } from "./httpClient";
 
-export type TelemetryPayload = {
+/** A stored telemetry reading (backend `Telemetry`). */
+export type TelemetryEntry = {
+  id: number;
   habitatId: number;
+  temperature: number;
+  humidity: number;
+  vpd: number;
+  recordedAt: string;
+  createdAt: string;
+};
+
+/** Body of POST /telemetry when authenticated with a user JWT. */
+export type CreateTelemetryPayload = {
   temperature: number;
   humidity: number;
 };
@@ -50,20 +61,33 @@ export type TelemetrySeriesResponse = {
  *
  * Responsibility:
  * - Knows the NestJS telemetry API contract.
- * - Encapsulates telemetry-specific headers (API key).
  *
- * Uses httpClient underneath — no hidden session logic. Calls that need a
- * user (series) take the token explicitly from the caller.
+ * Uses httpClient underneath — no hidden session logic. Every call takes the
+ * user's JWT explicitly from the caller. (API keys are for IoT devices that
+ * talk to NestJS directly; this app never uses them.)
  */
 export const telemetryClient = {
-  async submit(payload: TelemetryPayload): Promise<void> {
-    await httpClient("/telemetry", {
+  /**
+   * POST /telemetry with a JWT: NestJS requires `habitatId` in the body and
+   * answers 404 when the habitat does not belong to the user.
+   */
+  async create(
+    token: string,
+    habitatId: number,
+    payload: CreateTelemetryPayload,
+  ): Promise<TelemetryEntry> {
+    return httpClient("/telemetry", {
       method: "POST",
-      body: JSON.stringify(payload),
-      headers: {
-        "x-api-key": process.env.TELEMETRY_API_KEY ?? "",
-      },
-    });
+      body: JSON.stringify({ ...payload, habitatId }),
+      headers: { Authorization: `Bearer ${token}` },
+    }) as Promise<TelemetryEntry>;
+  },
+
+  async getLast(token: string, habitatId: number): Promise<TelemetryEntry> {
+    return httpClient(`/telemetry/${habitatId}/last`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }) as Promise<TelemetryEntry>;
   },
 
   async getSeries(

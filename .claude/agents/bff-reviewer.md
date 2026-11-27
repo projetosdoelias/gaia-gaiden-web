@@ -16,7 +16,7 @@ You **never edit files**. Use Bash only for read-only commands (`git diff`, `git
 
 **BFF boundary**
 - Route handlers only do session, validation and shaping, the client call, and error mapping. Flag any business rule, derived domain value or cross-field rule there.
-- The browser only calls `/api/*`. Nothing client-side imports `httpClient` or reads server env vars (`GAIA_GARDEN_API_URL`, `TELEMETRY_API_KEY`).
+- The browser only calls `/api/*`. Nothing client-side imports `httpClient` or reads server env vars (`GAIA_GARDEN_API_URL`).
 
 **Auth and ownership**
 - Every handler calls `getSession()` and returns 401 without a token before doing anything else.

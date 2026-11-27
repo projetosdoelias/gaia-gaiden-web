@@ -1,18 +1,8 @@
-import { httpClient } from "@/lib/api/httpClient";
+import { telemetryClient } from "@/lib/api/telemetryClient";
 import { APIClientError } from "@/lib/api/errors";
 import { withSession } from "@/lib/api/withSession";
 import { idParamSchema } from "@/lib/schemas/plant";
 import { NextResponse } from "next/server";
-
-export type TelemetryEntry = {
-  id: number;
-  habitatId: number;
-  recordedAt: string;
-  createdAt: string;
-  temperature: number;
-  humidity: number;
-  vpd: number;
-};
 
 type Ctx = RouteContext<"/api/telemetry/[habitatId]/last">;
 
@@ -28,13 +18,7 @@ export const GET = withSession<Ctx>(
     }
 
     try {
-      // Call NestJS: GET /telemetry/:habitatId/last
-      const data = await httpClient(`/telemetry/${habitatId.data}/last`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const data = await telemetryClient.getLast(token, habitatId.data);
 
       // Wrap the response consistently so the client always receives { data: ... }
       return NextResponse.json({ data });

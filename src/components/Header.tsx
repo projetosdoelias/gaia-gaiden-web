@@ -5,18 +5,18 @@ import UserMenu from "./UserMenu";
 
 export default function Header() {
   return (
-    <header className="h-16 bg-white border-b border-gray-100 px-4 md:px-6 flex items-center justify-between">
-      {/* Left section: Hamburger + Title */}
-      <div className="flex items-center space-x-3">
+    <header className="h-16 bg-white border-b border-gray-100 px-4 md:px-6 flex items-center justify-between gap-3">
+      {/* Left section: Hamburger + Title (title hidden on mobile to make room for the habitat selector) */}
+      <div className="flex items-center space-x-3 min-w-0">
         <SidebarToggle />
-        <h2 className="text-gaia-darkText font-semibold text-base md:text-lg">
+        <h2 className="hidden sm:block truncate text-gaia-darkText font-semibold text-base md:text-lg">
           Dashboard: Gaia Garden
         </h2>
       </div>
 
-      <div className="flex items-center space-x-3 md:space-x-4">
-        {/* 🔽 Seletor de Habitat */}
-        <div className="hidden sm:block">
+      <div className="flex flex-1 sm:flex-none min-w-0 items-center justify-end space-x-3 md:space-x-4">
+        {/* 🔽 Seletor de Habitat: always visible; it scopes every page. Fills the free space on mobile. */}
+        <div className="min-w-0 flex-1 sm:flex-none">
           <HabitatSelector />
         </div>
 

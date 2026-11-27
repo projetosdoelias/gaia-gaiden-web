@@ -1,18 +1,20 @@
 import { eventsClient } from "@/lib/api/eventsClient";
 import { withSession } from "@/lib/api/withSession";
+import { eventBodySchema } from "@/lib/schemas/event";
+import { idParamSchema } from "@/lib/schemas/plant";
 import { NextResponse } from "next/server";
 
-type Ctx = { params: Promise<{ habitatId: string; eventId: string }> };
+type Ctx = RouteContext<"/api/habitat/[habitatId]/events/[eventId]">;
 
 type ParsedIds =
   | { ok: true; habitatId: number; eventId: number }
   | { ok: false; response: NextResponse };
 
 async function parseIds(ctx: Ctx): Promise<ParsedIds> {
-  const { habitatId, eventId } = await ctx.params;
-  const habitatIdNum = parseInt(habitatId, 10);
-  const eventIdNum = parseInt(eventId, 10);
-  if (isNaN(habitatIdNum) || isNaN(eventIdNum)) {
+  const params = await ctx.params;
+  const habitatId = idParamSchema.safeParse(params.habitatId);
+  const eventId = idParamSchema.safeParse(params.eventId);
+  if (!habitatId.success || !eventId.success) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -21,7 +23,7 @@ async function parseIds(ctx: Ctx): Promise<ParsedIds> {
       ),
     };
   }
-  return { ok: true, habitatId: habitatIdNum, eventId: eventIdNum };
+  return { ok: true, habitatId: habitatId.data, eventId: eventId.data };
 }
 
 /**
@@ -43,7 +45,7 @@ export const GET = withSession<Ctx>(
 /**
  * PATCH /api/habitat/:habitatId/events/:eventId
  *
- * Updates an existing event. Expects a JSON body with a "description" field.
+ * Updates an existing event. Body is whitelisted by `eventBodySchema` (strict).
  */
 export const PATCH = withSession<Ctx>(
   "updating event",
@@ -51,19 +53,12 @@ export const PATCH = withSession<Ctx>(
     const ids = await parseIds(ctx);
     if (!ids.ok) return ids.response;
 
-    const body = (await request.json()) as { description?: string };
-    if (typeof body.description !== "string" || body.description.trim().length === 0) {
-      return NextResponse.json(
-        { message: "Description is required and must not be empty" },
-        { status: 400 },
-      );
-    }
-
+    const { description } = eventBodySchema.parse(await request.json());
     const updatedEvent = await eventsClient.update(
       token,
       ids.habitatId,
       ids.eventId,
-      body.description.trim(),
+      description,
     );
 
     return NextResponse.json(updatedEvent);
